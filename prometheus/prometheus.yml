@@ -1,0 +1,147 @@
+# Prometheus Configuration
+# Production-ready configuration with alerting and service discovery
+
+global:
+  # Default scrape interval
+  scrape_interval: 15s
+  
+  # Evaluation interval for rules
+  evaluation_interval: 15s
+  
+  # Scrape timeout
+  scrape_timeout: 10s
+
+  # External labels (sent with alerts and remote write)
+  external_labels:
+    cluster: 'production'
+    environment: 'prod'
+    # region: 'us-east-1'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+      # Timeout for Alertmanager requests
+      timeout: 10s
+      # API version
+      api_version: v2
+
+# Rule files - evaluate these periodically
+rule_files:
+  - 'rules/*.yml'
+
+# Scrape configurations
+scrape_configs:
+  # ========================================
+  # Prometheus self-monitoring
+  # ========================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    relabel_configs:
+      - target_label: instance
+        replacement: 'prometheus'
+
+  # ========================================
+  # Alertmanager
+  # ========================================
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']
+    relabel_configs:
+      - target_label: instance
+        replacement: 'alertmanager'
+
+  # ========================================
+  # Node Exporter - Host metrics
+  # ========================================
+  - job_name: 'node-exporter'
+    # Static targets (for fixed hosts)
+    static_configs:
+      - targets:
+          - 'node-exporter:9100'
+        labels:
+          env: 'production'
+    
+    # File-based service discovery (add/remove hosts dynamically)
+    file_sd_configs:
+      - files:
+          - 'targets/node-exporter.yml'
+        refresh_interval: 30s
+
+    # Relabeling
+    relabel_configs:
+      # Extract hostname from target address
+      - source_labels: [__address__]
+        regex: '([^:]+):\d+'
+        target_label: hostname
+        replacement: '${1}'
+
+  # ========================================
+  # Docker / cAdvisor - Container metrics
+  # ========================================
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metric_relabel_configs:
+      # Drop high-cardinality container metrics if needed
+      - source_labels: [__name__]
+        regex: 'container_(network_tcp_usage_total|tasks_state|cpu_load_average_10s)'
+        action: drop
+
+  # ========================================
+  # Kubernetes Service Discovery (if applicable)
+  # ========================================
+  # - job_name: 'kubernetes-pods'
+  #   kubernetes_sd_configs:
+  #     - role: pod
+  #   relabel_configs:
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+  #       action: keep
+  #       regex: true
+  #     - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+  #       action: replace
+  #       target_label: __metrics_path__
+  #       regex: (.+)
+  #     - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+  #       action: replace
+  #       regex: ([^:]+)(?::\d+)?;(\d+)
+  #       replacement: $1:$2
+  #       target_label: __address__
+  #     - source_labels: [__meta_kubernetes_namespace]
+  #       target_label: namespace
+  #     - source_labels: [__meta_kubernetes_pod_name]
+  #       target_label: pod
+
+  # ========================================
+  # Blackbox Exporter - Synthetic monitoring
+  # ========================================
+  # - job_name: 'blackbox-http'
+  #   metrics_path: /probe
+  #   params:
+  #     module: [http_2xx]
+  #   file_sd_configs:
+  #     - files:
+  #         - 'targets/blackbox-http.yml'
+  #   relabel_configs:
+  #     - source_labels: [__address__]
+  #       target_label: __param_target
+  #     - source_labels: [__param_target]
+  #       target_label: instance
+  #     - target_label: __address__
+  #       replacement: blackbox-exporter:9115
+
+# Remote write (for long-term storage)
+# remote_write:
+#   - url: 'http://mimir:9009/api/v1/push'
+#     queue_config:
+#       max_samples_per_send: 1000
+#       max_shards: 200
+#       capacity: 2500
+
+# Remote read (for querying long-term storage)
+# remote_read:
+#   - url: 'http://mimir:9009/prometheus/api/v1/read'
+#     read_recent: true

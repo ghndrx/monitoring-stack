@@ -1,0 +1,274 @@
+# Node Exporter Alert Rules
+# Production-ready host/VM monitoring alerts
+# Reference: https://samber.github.io/awesome-prometheus-alerts/
+
+groups:
+  - name: node-exporter-alerts
+    rules:
+      # ============================================
+      # Availability
+      # ============================================
+      - alert: NodeDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node exporter down ({{ $labels.instance }})"
+          description: "Node exporter is not responding.\n  Instance: {{ $labels.instance }}"
+          runbook_url: "https://runbooks.example.com/node-down"
+
+      # ============================================
+      # CPU
+      # ============================================
+      - alert: HostHighCpuLoad
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU load ({{ $labels.instance }})"
+          description: "CPU load is > 80%\n  Current value: {{ $value | printf \"%.1f\" }}%"
+
+      - alert: HostCriticalCpuLoad
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical CPU load ({{ $labels.instance }})"
+          description: "CPU load is > 95%\n  Current value: {{ $value | printf \"%.1f\" }}%"
+
+      - alert: HostCpuStealNoisyNeighbor
+        expr: avg by(instance) (rate(node_cpu_seconds_total{mode="steal"}[5m])) * 100 > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU steal high - noisy neighbor ({{ $labels.instance }})"
+          description: "CPU steal is > 10%. A noisy neighbor VM is consuming resources.\n  Current value: {{ $value | printf \"%.1f\" }}%"
+
+      # ============================================
+      # Memory
+      # ============================================
+      - alert: HostHighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage ({{ $labels.instance }})"
+          description: "Memory usage is > 85%\n  Current value: {{ $value | printf \"%.1f\" }}%"
+
+      - alert: HostCriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical memory usage ({{ $labels.instance }})"
+          description: "Memory usage is > 95%\n  Current value: {{ $value | printf \"%.1f\" }}%"
+
+      - alert: HostMemoryUnderPressure
+        expr: rate(node_vmstat_pgmajfault[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host memory under pressure ({{ $labels.instance }})"
+          description: "High rate of major page faults ({{ $value | printf \"%.0f\" }}/sec). System may be swapping."
+
+      - alert: HostOomKillDetected
+        expr: increase(node_vmstat_oom_kill[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "OOM kill detected ({{ $labels.instance }})"
+          description: "OOM kill detected. A process was terminated due to memory pressure."
+
+      # ============================================
+      # Disk Space
+      # ============================================
+      - alert: HostDiskSpaceWarning
+        expr: |
+          (
+            (node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes < 20
+            and node_filesystem_readonly == 0
+          ) * on(instance, device, mountpoint) group_left node_filesystem_size_bytes > 1e9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space < 20% ({{ $labels.instance }})"
+          description: "Disk {{ $labels.mountpoint }} is almost full (< 20% free)\n  Current free: {{ $value | printf \"%.1f\" }}%"
+
+      - alert: HostDiskSpaceCritical
+        expr: |
+          (
+            (node_filesystem_avail_bytes * 100) / node_filesystem_size_bytes < 10
+            and node_filesystem_readonly == 0
+          ) * on(instance, device, mountpoint) group_left node_filesystem_size_bytes > 1e9
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space < 10% ({{ $labels.instance }})"
+          description: "Disk {{ $labels.mountpoint }} is critically full (< 10% free)\n  Current free: {{ $value | printf \"%.1f\" }}%"
+
+      - alert: HostDiskWillFillIn24Hours
+        expr: |
+          (
+            node_filesystem_avail_bytes * 100 / node_filesystem_size_bytes < 10
+            and predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|nfs"}[6h], 24 * 3600) < 0
+            and node_filesystem_readonly == 0
+          )
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk will fill within 24h ({{ $labels.instance }})"
+          description: "Filesystem {{ $labels.mountpoint }} is predicted to run out of space within 24 hours at current write rate."
+
+      # ============================================
+      # Disk I/O
+      # ============================================
+      - alert: HostDiskReadLatency
+        expr: rate(node_disk_read_time_seconds_total[5m]) / rate(node_disk_reads_completed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk read latency ({{ $labels.instance }})"
+          description: "Disk read latency is > 100ms\n  Current value: {{ $value | printf \"%.0f\" }}ms"
+
+      - alert: HostDiskWriteLatency
+        expr: rate(node_disk_write_time_seconds_total[5m]) / rate(node_disk_writes_completed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High disk write latency ({{ $labels.instance }})"
+          description: "Disk write latency is > 100ms\n  Current value: {{ $value | printf \"%.0f\" }}ms"
+
+      - alert: HostDiskIOSaturation
+        expr: rate(node_disk_io_time_weighted_seconds_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk I/O saturated ({{ $labels.instance }})"
+          description: "Disk I/O is saturated on {{ $labels.device }}. Weighted I/O time: {{ $value | printf \"%.1f\" }}s"
+
+      # ============================================
+      # Network
+      # ============================================
+      - alert: HostNetworkReceiveErrors
+        expr: rate(node_network_receive_errs_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Network receive errors ({{ $labels.instance }})"
+          description: "Network interface {{ $labels.device }} has receive errors.\n  Rate: {{ $value | printf \"%.1f\" }}/s"
+
+      - alert: HostNetworkTransmitErrors
+        expr: rate(node_network_transmit_errs_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Network transmit errors ({{ $labels.instance }})"
+          description: "Network interface {{ $labels.device }} has transmit errors.\n  Rate: {{ $value | printf \"%.1f\" }}/s"
+
+      - alert: HostNetworkInterfaceSaturated
+        expr: |
+          (
+            rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*|br-.*"}[5m]) +
+            rate(node_network_transmit_bytes_total{device!~"lo|docker.*|veth.*|br-.*"}[5m])
+          ) / node_network_speed_bytes{device!~"lo|docker.*|veth.*|br-.*"} > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Network interface saturated ({{ $labels.instance }})"
+          description: "Network interface {{ $labels.device }} is > 80% saturated."
+
+      # ============================================
+      # System
+      # ============================================
+      - alert: HostClockSkew
+        expr: |
+          (
+            node_timex_offset_seconds > 0.05
+            or node_timex_offset_seconds < -0.05
+          )
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Clock skew detected ({{ $labels.instance }})"
+          description: "Clock skew is > 50ms. NTP may not be working.\n  Offset: {{ $value | printf \"%.3f\" }}s"
+
+      - alert: HostClockNotSynchronising
+        expr: min_over_time(node_timex_sync_status[5m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Clock not synchronising ({{ $labels.instance }})"
+          description: "Clock is not synchronising. Verify NTP configuration."
+
+      - alert: HostRequiresReboot
+        expr: node_reboot_required > 0
+        for: 4h
+        labels:
+          severity: info
+        annotations:
+          summary: "Host requires reboot ({{ $labels.instance }})"
+          description: "Kernel updates require a reboot."
+
+      - alert: HostSystemdServiceCrashed
+        expr: node_systemd_unit_state{state="failed"} == 1
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Systemd service crashed ({{ $labels.instance }})"
+          description: "Systemd service {{ $labels.name }} has crashed/failed."
+
+      # ============================================
+      # Entropy
+      # ============================================
+      - alert: HostLowEntropy
+        expr: node_entropy_available_bits < 200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low entropy ({{ $labels.instance }})"
+          description: "Available entropy is low ({{ $value }} bits). Crypto operations may block."
+
+      # ============================================
+      # File Descriptors
+      # ============================================
+      - alert: HostFileDescriptorsExhausted
+        expr: node_filefd_allocated / node_filefd_maximum * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "File descriptors > 80% ({{ $labels.instance }})"
+          description: "File descriptor usage is high ({{ $value | printf \"%.1f\" }}%)."
+
+      # ============================================
+      # Conntrack
+      # ============================================
+      - alert: HostConntrackLimit
+        expr: node_nf_conntrack_entries / node_nf_conntrack_entries_limit * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Conntrack limit > 80% ({{ $labels.instance }})"
+          description: "Conntrack table is {{ $value | printf \"%.1f\" }}% full. Connections may be dropped."

@@ -1,0 +1,30 @@
+# Node Exporter Targets
+# File-based service discovery for node-exporter
+# Prometheus watches this file and reloads targets automatically
+#
+# Add your hosts below:
+# - Each target should be hostname:port (default port 9100)
+# - Labels are applied to all metrics from that target
+# - Changes are picked up automatically (no Prometheus restart needed)
+
+# Example configuration:
+# - targets:
+#     - 'web-server-01:9100'
+#     - 'web-server-02:9100'
+#   labels:
+#     role: 'web'
+#     datacenter: 'us-east-1'
+#
+# - targets:
+#     - 'db-primary:9100'
+#     - 'db-replica-01:9100'
+#   labels:
+#     role: 'database'
+#     datacenter: 'us-east-1'
+
+# Your targets:
+- targets:
+    - 'localhost:9100'
+  labels:
+    role: 'prometheus'
+    env: 'production'
