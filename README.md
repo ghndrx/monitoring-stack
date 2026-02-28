@@ -19,8 +19,14 @@ Production-ready monitoring stack configurations for Prometheus, Grafana, Loki, 
 ├── alertmanager/
 │   └── alertmanager.yml       # Alert routing & receivers
 ├── grafana/
-│   ├── dashboards/            # JSON dashboards
-│   └── datasources/           # Data source configs
+│   ├── provisioning/
+│   │   ├── dashboards/        # Dashboard provisioning config
+│   │   │   └── default.yml    # Auto-load dashboards from folders
+│   │   └── datasources/       # Data source provisioning
+│   │       └── prometheus.yml # Prometheus + Loki datasources
+│   └── dashboards/
+│       └── infrastructure/    # Infrastructure dashboards
+│           └── node-exporter-full.json  # Comprehensive host monitoring
 ├── loki/                      # Log aggregation
 └── promtail/                  # Log shipping
 ```
@@ -98,6 +104,42 @@ Add hosts without restarting Prometheus:
 ```
 
 Prometheus watches this file and auto-reloads targets.
+
+## 📊 Grafana Provisioning
+
+This stack uses GitOps-friendly provisioning - dashboards and datasources are defined in code and automatically loaded on startup.
+
+### Datasources
+
+Datasources are configured via `grafana/provisioning/datasources/prometheus.yml`:
+- **Prometheus** - Metrics backend (default datasource)
+- **Loki** - Log aggregation with trace ID correlation
+
+Environment variables for flexibility:
+```bash
+PROMETHEUS_URL=http://prometheus:9090
+LOKI_URL=http://loki:3100
+```
+
+### Dashboards
+
+Dashboards are auto-provisioned from `grafana/dashboards/`:
+
+| Dashboard | Description |
+|-----------|-------------|
+| **Node Exporter Full** | Comprehensive host monitoring with CPU, memory, disk, and network panels |
+
+Features:
+- Template variables for instance/disk/interface filtering
+- Stacked area charts with intuitive color coding
+- Filesystem usage table with progress bars
+- Network traffic with bidirectional (RX/TX) visualization
+
+### Adding Custom Dashboards
+
+1. Export dashboard JSON from Grafana UI
+2. Save to `grafana/dashboards/infrastructure/` or `grafana/dashboards/application/`
+3. Restart Grafana or wait 30 seconds for auto-reload
 
 ## 🔧 Configuration
 

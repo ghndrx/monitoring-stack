@@ -1,0 +1,53 @@
+# Grafana Datasource Provisioning - Prometheus
+# https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources
+apiVersion: 1
+
+# Automatically delete data sources not in this file
+prune: true
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    # Use environment variable for flexibility across environments
+    url: ${PROMETHEUS_URL:-http://prometheus:9090}
+    isDefault: true
+    editable: false
+    jsonData:
+      # Query timeout
+      timeout: 60
+      # Enable query editor autocomplete
+      manageAlerts: true
+      # Prometheus type detection
+      prometheusType: Prometheus
+      prometheusVersion: "2.50.0"
+      # Caching (reduces load on Prometheus)
+      cacheLevel: Low
+      # Disable alerting here if using Alertmanager
+      disableRecordingRules: false
+      # Increment interval step for range queries
+      incrementalQuerying: true
+      incrementalQueryOverlapWindow: 10m
+      # HTTP settings
+      httpMethod: POST
+      # Exemplar support (if using tracing)
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: ${LOKI_URL:-http://loki:3100}
+    editable: false
+    jsonData:
+      timeout: 60
+      maxLines: 1000
+      derivedFields:
+        # Extract trace IDs from logs for correlation
+        - name: TraceID
+          matcherRegex: '"trace_id":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
